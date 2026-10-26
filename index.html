@@ -2,11 +2,13 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Mobile Connection Test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Touch Test</title>
+    <style>
+        body { background: black; color: white; height: 100vh; margin: 0; display: flex; justify-content: center; align-items: center; font-family: sans-serif; font-size: 24px; }
+    </style>
 </head>
-<body style="background-color: #111; color: #0f0; font-family: monospace; text-align: center; padding-top: 50px;">
-    <h1>[+] DIAGNOSTIC PAGE LOADED</h1>
-    <p>Target Browser Sandbox Active.</p>
-    <p id="status">Status: Connected successfully</p>
+<body ontouchstart="this.style.background='green'; this.innerText='تم رصد اللمس بنجاح!';" ontouchend="this.style.background='black'; this.innerText='المس الشاشة هنا';">
+    المس الشاشة هنا
 </body>
 </html>
