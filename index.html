@@ -3,108 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لوحة التحكم الشاملة - استخراج البيانات</title>
+    <title>محطة التحكم المتقدمة عبر الويب</title>
     <style>
-        body { background: #121212; color: #fff; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        header { background: #1f1f1f; padding: 12px; text-align: center; font-size: 16px; border-bottom: 1px solid #333; font-weight: bold; }
+        body { background: #0a0a0a; color: #00ff66; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        header { background: #111; padding: 15px; text-align: center; font-size: 16px; border-bottom: 1px solid #222; }
         
-        /* منطقة اللمس والتحكم */
-        #touchpad { flex-grow: 1; background: #1e1e1e; margin: 10px; border-radius: 12px; border: 2px dashed #444; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; font-size: 18px; color: #aaa; touch-action: none; position: relative; }
-        #touchpad.active { background: #1b3b22; border-color: #4CAF50; color: #4CAF50; }
-
-        /* قسم استخراج البيانات والرفع */
-        .data-panel { background: #1a1a1a; padding: 10px; border-top: 1px solid #333; display: flex; flex-direction: column; gap: 8px; }
-        .data-row { display: flex; gap: 8px; }
+        #terminal { flex-grow: 1; background: #000; margin: 10px; border-radius: 8px; border: 1px solid #00ff66; padding: 10px; overflow-y: auto; font-size: 14px; text-align: left; direction: ltr; }
         
-        .action-btn { background: #2e7d32; color: white; border: none; padding: 10px; border-radius: 6px; font-size: 14px; cursor: pointer; flex: 1; text-align: center; }
-        .action-btn:active { background: #1b5e20; }
+        .control-panel { padding: 10px; background: #111; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #222; }
+        .row { display: flex; gap: 8px; }
         
-        .file-input-btn { background: #0277bd; }
-        .file-input-btn:active { background: #01579b; }
-
-        /* شريط التنقل السفلي */
-        .nav-bar { display: flex; justify-content: space-around; padding: 10px; background: #1f1f1f; border-top: 1px solid #333; }
-        .nav-btn { background: #333; color: white; border: none; padding: 10px 15px; border-radius: 6px; font-size: 14px; cursor: pointer; flex: 1; margin: 0 3px; }
-        .nav-btn:active { background: #555; }
+        .btn { background: #00ff66; color: #000; border: none; padding: 12px; border-radius: 6px; font-size: 14px; font-weight: bold; cursor: pointer; flex: 1; text-align: center; }
+        .btn:active { background: #00cc52; }
     </style>
 </head>
 <body>
 
-    <header>لوحة التحكم واستخراج البيانات</header>
+    <header>محطة التحكم والربط المباشر</header>
 
-    <!-- منطقة التفاعل باللمس -->
-    <div id="touchpad">
-        منطقة التحكم واللمس التفاعلي<br>
-        <span style="font-size: 12px; color: #666; margin-top: 5px;">(اسحب أو انقر هنا لتوجيه الهاتف)</span>
+    <div id="terminal">
+        [System] Initializing web control interface...<br>
+        [System] Waiting for bridge connection...<br>
     </div>
 
-    <!-- لوحة استخراج البيانات والملفات -->
-    <div class="data-panel">
-        <div class="data-row">
-            <!-- زر لاختيار ورفع الصور أو ملفات واتساب مباشرة -->
-            <label class="action-btn file-input-btn" style="display:flex; justify-content:center; align-items:center; cursor:pointer;">
-                📁 اختيار ورفع ملفات/صور
-                <input type="file" id="filePicker" multiple style="display: none;" onchange="handleFiles(this)">
-            </label>
-            <!-- زر لتصدير جهات الاتصال كملف نصي/vCard وجلبها -->
-            <button class="action-btn" onclick="exportContacts()">📇 جهات الاتصال</button>
+    <div class="control-panel">
+        <div class="row">
+            <button class="btn" onclick="sendPing()">إرسال نبضة تنشيط (Ping)</button>
+            <button class="btn" onclick="forceWakeLock()">إبقاء الشاشة نشطة</button>
+        </div>
+        <div class="row">
+            <button class="btn" onclick="triggerAutoRefresh()">تحديث إجباري للرابط</button>
         </div>
     </div>
 
-    <!-- شريط أزرار النظام -->
-    <div class="nav-bar">
-        <button class="nav-btn" onclick="sysAction('back')">رجوع ◀</button>
-        <button class="nav-btn" onclick="sysAction('home')">الرئيسية ⏺</button>
-        <button class="nav-btn" onclick="sysAction('scrollUp')">▲ للأعلى</button>
-        <button class="nav-btn" onclick="sysAction('scrollDown')">▼ للأسفل</button>
-    </div>
-
     <script>
-        const touchpad = document.getElementById('touchpad');
+        const terminal = document.getElementById('terminal');
 
-        touchpad.addEventListener('touchstart', (e) => {
-            touchpad.classList.add('active');
-            touchpad.innerText = "جاري تنفيذ الإيماءة...";
-        });
+        function log(msg) {
+            terminal.innerHTML += `<br>> ${msg}`;
+            terminal.scrollTop = terminal.scrollHeight;
+        }
 
-        touchpad.addEventListener('touchend', (e) => {
-            touchpad.classList.remove('active');
-            touchpad.innerText = "منطقة التحكم واللمس التفاعلي\n(اسحب أو انقر هنا لتوجيه الهاتف)";
-        });
+        function sendPing() {
+            log("Sending active signal to browser session...");
+            // محاولة إرسال طلب داخلي لإبقاء الجلسة حية
+            fetch(window.location.href, { mode: 'no-cors' })
+                .then(() => log("Signal sent successfully."))
+                .catch(err => log("Signal error: " + err));
+        }
 
-        function sysAction(action) {
-            if(action === 'back') {
-                window.history.back();
-            } else if(action === 'home') {
-                window.location.href = 'tel:'; // محاولة فتح الاتصال أو العودة
-            } else if(action === 'scrollUp') {
-                window.scrollBy({ top: -300, behavior: 'smooth' });
-            } else if(action === 'scrollDown') {
-                window.scrollBy({ top: 300, behavior: 'smooth' });
+        async function forceWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    const wakeLock = await navigator.wakeLock.request('screen');
+                    log("Wake Lock active: Screen will stay awake.");
+                } else {
+                    log("Wake Lock API not supported on this browser.");
+                }
+            } catch (err) {
+                log(`Wake Lock error: ${err.name}, ${err.message}`);
             }
         }
 
-        function handleFiles(input) {
-            const files = input.files;
-            if (files.length > 0) {
-                alert("تم تحديد " + files.length + " ملف/صور بنجاح. سيتم تجهيزها للرفع والسحب.");
-                // يمكننا توسيع هذه الدّالة لترسل الملفات تلقائياً للخادم أو لحفظها
-            }
+        function triggerAutoRefresh() {
+            log("Refreshing interface context...");
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
         }
 
-        function exportContacts() {
-            // محاكاة تصحيح أو سحب جهات الاتصال عبر المتصفح
-            alert("جاري فحص جهات الاتصال المتاحة للمشاركة...");
-            const dummyData = "BEGIN:VCARD\nVERSION:3.0\nFN:My Backup Contact\nTEL:+123456789\nEND:VCARD";
-            const blob = new Blob([dummyData], { type: 'text/vcard' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'Contacts_Backup.vcf';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-        }
+        // تشغيل ميزة إبقاء الشاشة نشطة تلقائياً عند فتح الصفحة
+        forceWakeLock();
     </script>
 </body>
 </html>
