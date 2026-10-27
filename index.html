@@ -3,77 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>محطة التحكم المتقدمة عبر الويب</title>
+    <title>محرك التحكم والتنقل التلقائي</title>
     <style>
-        body { background: #0a0a0a; color: #00ff66; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        header { background: #111; padding: 15px; text-align: center; font-size: 16px; border-bottom: 1px solid #222; }
+        body { background: #050505; color: #00ffcc; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        header { background: #111; padding: 12px; text-align: center; font-size: 15px; border-bottom: 1px solid #222; font-weight: bold; }
         
-        #terminal { flex-grow: 1; background: #000; margin: 10px; border-radius: 8px; border: 1px solid #00ff66; padding: 10px; overflow-y: auto; font-size: 14px; text-align: left; direction: ltr; }
+        #console-box { flex-grow: 1; background: #000; margin: 8px; border-radius: 6px; border: 1px solid #00ffcc; padding: 8px; overflow-y: auto; font-size: 11px; text-align: left; direction: ltr; }
         
-        .control-panel { padding: 10px; background: #111; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #222; }
-        .row { display: flex; gap: 8px; }
+        .panel { padding: 8px; background: #111; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #222; }
+        .row { display: flex; gap: 6px; }
         
-        .btn { background: #00ff66; color: #000; border: none; padding: 12px; border-radius: 6px; font-size: 14px; font-weight: bold; cursor: pointer; flex: 1; text-align: center; }
-        .btn:active { background: #00cc52; }
+        .btn { background: #00ffcc; color: #000; border: none; padding: 10px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; flex: 1; text-align: center; }
+        .btn:active { background: #00cc99; }
+        .btn-action { background: #ff9900; color: #000; }
+        .btn-action:active { background: #cc7a00; }
     </style>
 </head>
 <body>
 
-    <header>محطة التحكم والربط المباشر</header>
+    <header>محرك التحكم والتنقل التلقائي</header>
 
-    <div id="terminal">
-        [System] Initializing web control interface...<br>
-        [System] Waiting for bridge connection...<br>
+    <div id="console-box">
+        [Engine] Initializing Autonomous Touch & Navigation Core...<br>
+        [Engine] Waiting for system bridge activation...
     </div>
 
-    <div class="control-panel">
+    <div class="panel">
         <div class="row">
-            <button class="btn" onclick="sendPing()">إرسال نبضة تنشيط (Ping)</button>
-            <button class="btn" onclick="forceWakeLock()">إبقاء الشاشة نشطة</button>
+            <button class="btn" onclick="toggleAutoDrive()">تشغيل القيادة الآلية (Auto-Pilot)</button>
+            <button class="btn btn-action" onclick="simulateSwipeDown()">إيماءة سحب للأسفل</button>
         </div>
         <div class="row">
-            <button class="btn" onclick="triggerAutoRefresh()">تحديث إجباري للرابط</button>
+            <button class="btn btn-action" onclick="simulateClickCenter()">نقرة مركز الشاشة</button>
+            <button class="btn" onclick="clearConsole()">مسح السجل</button>
         </div>
     </div>
 
     <script>
-        const terminal = document.getElementById('terminal');
+        const consoleBox = document.getElementById('console-box');
+        let autoDriveActive = false;
+        let autoDriveInterval;
 
         function log(msg) {
-            terminal.innerHTML += `<br>> ${msg}`;
-            terminal.scrollTop = terminal.scrollHeight;
+            consoleBox.innerHTML += `<br>> ${msg}`;
+            consoleBox.scrollTop = consoleBox.scrollHeight;
         }
 
-        function sendPing() {
-            log("Sending active signal to browser session...");
-            // محاولة إرسال طلب داخلي لإبقاء الجلسة حية
-            fetch(window.location.href, { mode: 'no-cors' })
-                .then(() => log("Signal sent successfully."))
-                .catch(err => log("Signal error: " + err));
-        }
-
-        async function forceWakeLock() {
+        // محاكاة إرسال حدث لمس (Touch Event) وهمي في إحداثيات الشاشة
+        function simulateTouch(x, y, type) {
             try {
-                if ('wakeLock' in navigator) {
-                    const wakeLock = await navigator.wakeLock.request('screen');
-                    log("Wake Lock active: Screen will stay awake.");
-                } else {
-                    log("Wake Lock API not supported on this browser.");
-                }
+                const target = document.elementFromPoint(x, y) || document.body;
+                const touch = new Touch({
+                    identifier: Date.now(),
+                    target: target,
+                    clientX: x,
+                    clientY: y,
+                    screenX: x,
+                    screenY: y,
+                    pageX: x,
+                    pageY: y
+                });
+
+                const touchEvent = new TouchEvent(type, {
+                    cancelable: true,
+                    bubbles: true,
+                    composed: true,
+                    touches: type === 'touchend' ? [] : [touch],
+                    targetTouches: type === 'touchend' ? [] : [touch],
+                    changedTouches: [touch]
+                });
+
+                target.dispatchEvent(touchEvent);
+                log(`Simulated [${type}] at X:${x}, Y:${y}`);
             } catch (err) {
-                log(`Wake Lock error: ${err.name}, ${err.message}`);
+                log(`Simulation error: ${err.message}`);
             }
         }
 
-        function triggerAutoRefresh() {
-            log("Refreshing interface context...");
-            setTimeout(() => {
-                window.location.reload();
-            }, 1000);
+        function simulateClickCenter() {
+            const x = window.innerWidth / 2;
+            const y = window.innerHeight / 2;
+            log("Executing center tap simulation...");
+            simulateTouch(x, y, 'touchstart');
+            setTimeout(() => simulateTouch(x, y, 'touchend'), 100);
         }
 
-        // تشغيل ميزة إبقاء الشاشة نشطة تلقائياً عند فتح الصفحة
-        forceWakeLock();
+        function simulateSwipeDown() {
+            log("Executing vertical scroll/swipe simulation...");
+            window.scrollBy({ top: 400, behavior: 'smooth' });
+        }
+
+        function toggleAutoDrive() {
+            autoDriveActive = !autoDriveActive;
+            if (autoDriveActive) {
+                log("Auto-Pilot mode ENGAGED. Sending periodic navigation pulses...");
+                autoDriveInterval = setInterval(() => {
+                    // توليد حركات وتمرير تلقائي لاختبار استجابة المتصفح
+                    window.scrollBy({ top: (Math.random() > 0.5 ? 50 : -50), behavior: 'smooth' });
+                }, 3000);
+            } else {
+                log("Auto-Pilot mode DISENGAGED.");
+                clearInterval(autoDriveInterval);
+            }
+        }
+
+        function clearConsole() {
+            consoleBox.innerHTML = "[Engine] Console cleared. Ready...";
+        }
+
+        // الحفاظ على الشاشة نشطة دائماً
+        if ('wakeLock' in navigator) {
+            navigator.wakeLock.request('screen').then(() => {
+                log("Screen Wake Lock active (Screen won't sleep).");
+            }).catch(err => {
+                log("Wake Lock status: " + err.message);
+            });
+        }
     </script>
 </body>
 </html>
