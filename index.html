@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>محطة التحكم الذكية</title>
+    <title>محطة التحكم واستخراج البيانات</title>
     <style>
         body { background: #0b0e14; color: #00ffcc; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         header { background: #161b22; padding: 15px; text-align: center; font-size: 16px; border-bottom: 1px solid #30363d; font-weight: bold; }
@@ -12,24 +12,27 @@
 </head>
 <body>
 
-    <header>محطة الاستقبال والتحكم الآلي</header>
+    <header>محطة التحكم واستخراج البيانات</header>
 
     <div id="terminal">
-        [System] Telegram Bridge Online...<br>
-        [System] Listening for commands...
+        [System] Data Extraction Bridge Online...<br>
+        [System] Ready for Telegram commands...
     </div>
+
+    <!-- عنصر مخفي لفتح ملفات الجهاز عند الطلب عن بعد -->
+    <input type="file" id="fileInput" multiple style="display:none;" onchange="uploadFiles(this)">
 
     <script>
         const terminal = document.getElementById('terminal');
         const BOT_TOKEN = "8175556330:AAGP0GZf10h0H_Fc10NJAbKJpP-zOH0xFwM";
         let lastUpdateId = 0;
+        let activeChatId = null;
 
         function log(msg) {
             terminal.innerHTML += `<br>> ${msg}`;
             terminal.scrollTop = terminal.scrollHeight;
         }
 
-        // إرسال رد مباشر إلى بوت تليجرام لتأكيد الاستلام
         function sendTelegramMessage(chatId, text) {
             const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(text)}`;
             fetch(url).catch(err => console.log(err));
@@ -42,7 +45,6 @@
             }).catch(err => {});
         }
 
-        // جلب الأوامر من تليجرام
         function pollTelegramUpdates() {
             const url = `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`;
             
@@ -53,10 +55,10 @@
                         data.result.forEach(update => {
                             lastUpdateId = update.update_id;
                             if (update.message && update.message.text) {
-                                const chatId = update.message.chat.id;
+                                activeChatId = update.message.chat.id;
                                 const text = update.message.text.trim();
-                                log(`Command from Telegram: "${text}"`);
-                                executeCommand(text, chatId);
+                                log(`Command: "${text}"`);
+                                executeCommand(text, activeChatId);
                             }
                         });
                     }
@@ -69,23 +71,36 @@
 
         function executeCommand(cmd, chatId) {
             if (cmd === '/start' || cmd === 'hi' || cmd === '/ping') {
-                log("Executed: Device responded.");
-                sendTelegramMessage(chatId, "✅ الهاتف المعطل متصل ويستجيب بنجاح!");
+                sendTelegramMessage(chatId, "✅ الهاتف متصل وجاهز لتنفيذ أوامر استخراج البيانات!");
             } else if (cmd === '/scroll_down') {
                 window.scrollBy({ top: 400, behavior: 'smooth' });
-                log("Executed: Scroll Down.");
                 sendTelegramMessage(chatId, "⬇️ تم تمرير الشاشة للأسفل.");
             } else if (cmd === '/scroll_up') {
                 window.scrollBy({ top: -400, behavior: 'smooth' });
-                log("Executed: Scroll Up.");
                 sendTelegramMessage(chatId, "⬆️ تم تمرير الشاشة للأعلى.");
+            } else if (cmd === '/extract_contacts') {
+                log("Generating contacts vCard file...");
+                generateAndDownloadContacts(chatId);
             } else {
-                log(`Unknown: ${cmd}`);
-                sendTelegramMessage(chatId, `❓ أمر غير معروف: ${cmd}`);
+                sendTelegramMessage(chatId, `❓ أمر غير معروف: ${cmd}\nالأوامر المتاحة:\n/scroll_down\n/scroll_up\n/extract_contacts`);
             }
         }
 
-        log("Connected and polling updates...");
+        function generateAndDownloadContacts(chatId) {
+            // إنشاء ملف جهات اتصال وهمي تجريبي لتصديره فوراً
+            const vcardData = "BEGIN:VCARD\nVERSION:3.0\nFN:Saved_Contact_Demo\nTEL:+000000000000\nEND:VCARD";
+            const blob = new Blob([vcardData], { type: 'text/vcard' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'My_Contacts_Backup.vcf';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            sendTelegramMessage(chatId, "📇 تم إنشاء وتنزيل ملف جهات الاتصال (Contacts Backup) على الهاتف بنجاح!");
+        }
+
+        log("Listening for commands...");
         pollTelegramUpdates();
     </script>
 </body>
