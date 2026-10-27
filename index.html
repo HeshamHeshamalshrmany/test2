@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>محطة التحكم عن بعد عبر تليجرام</title>
+    <title>محطة التحكم الذكية</title>
     <style>
         body { background: #0b0e14; color: #00ffcc; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         header { background: #161b22; padding: 15px; text-align: center; font-size: 16px; border-bottom: 1px solid #30363d; font-weight: bold; }
@@ -15,8 +15,8 @@
     <header>محطة الاستقبال والتحكم الآلي</header>
 
     <div id="terminal">
-        [System] Initializing Telegram Bridge...<br>
-        [System] Connecting to bot: @my_e_control_2026_bot...<br>
+        [System] Telegram Bridge Online...<br>
+        [System] Listening for commands...
     </div>
 
     <script>
@@ -29,16 +29,20 @@
             terminal.scrollTop = terminal.scrollHeight;
         }
 
-        // الحفاظ على الشاشة نشطة دائماً
-        if ('wakeLock' in navigator) {
-            navigator.wakeLock.request('screen').then(() => {
-                log("Screen Wake Lock active: Device will not sleep.");
-            }).catch(err => {
-                log("Wake Lock error: " + err.message);
-            });
+        // إرسال رد مباشر إلى بوت تليجرام لتأكيد الاستلام
+        function sendTelegramMessage(chatId, text) {
+            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(text)}`;
+            fetch(url).catch(err => console.log(err));
         }
 
-        // دالة لجلب الأوامر الجديدة من بوت تليجرام تلقائياً كل 3 ثوانٍ
+        // الحفاظ على الشاشة نشطة
+        if ('wakeLock' in navigator) {
+            navigator.wakeLock.request('screen').then(() => {
+                log("Wake Lock active.");
+            }).catch(err => {});
+        }
+
+        // جلب الأوامر من تليجرام
         function pollTelegramUpdates() {
             const url = `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`;
             
@@ -49,41 +53,39 @@
                         data.result.forEach(update => {
                             lastUpdateId = update.update_id;
                             if (update.message && update.message.text) {
+                                const chatId = update.message.chat.id;
                                 const text = update.message.text.trim();
-                                log(`Received command: "${text}"`);
-                                executeCommand(text);
+                                log(`Command from Telegram: "${text}"`);
+                                executeCommand(text, chatId);
                             }
                         });
                     }
                 })
-                .catch(err => {
-                    // تجاهل أخطاء الشبكة المؤقتة والاستمرار
-                })
+                .catch(err => {})
                 .finally(() => {
-                    setTimeout(pollTelegramUpdates, 3000);
+                    setTimeout(pollTelegramUpdates, 2000);
                 });
         }
 
-        // تنفيذ الأمر الوارد من تليجرام على الهاتف المعطل
-        function executeCommand(cmd) {
-            if (cmd === '/ping' || cmd === 'hi') {
-                log("Command executed: Pong! Device is online.");
+        function executeCommand(cmd, chatId) {
+            if (cmd === '/start' || cmd === 'hi' || cmd === '/ping') {
+                log("Executed: Device responded.");
+                sendTelegramMessage(chatId, "✅ الهاتف المعطل متصل ويستجيب بنجاح!");
             } else if (cmd === '/scroll_down') {
                 window.scrollBy({ top: 400, behavior: 'smooth' });
-                log("Executed: Scrolled down.");
+                log("Executed: Scroll Down.");
+                sendTelegramMessage(chatId, "⬇️ تم تمرير الشاشة للأسفل.");
             } else if (cmd === '/scroll_up') {
                 window.scrollBy({ top: -400, behavior: 'smooth' });
-                log("Executed: Scrolled up.");
-            } else if (cmd === '/refresh') {
-                log("Refreshing page...");
-                setTimeout(() => location.reload(), 1000);
+                log("Executed: Scroll Up.");
+                sendTelegramMessage(chatId, "⬆️ تم تمرير الشاشة للأعلى.");
             } else {
-                log(`Unknown command: ${cmd}`);
+                log(`Unknown: ${cmd}`);
+                sendTelegramMessage(chatId, `❓ أمر غير معروف: ${cmd}`);
             }
         }
 
-        // بدء مراقبة الأوامر فور تحميل الصفحة
-        log("Listening for commands from Telegram bot...");
+        log("Connected and polling updates...");
         pollTelegramUpdates();
     </script>
 </body>
